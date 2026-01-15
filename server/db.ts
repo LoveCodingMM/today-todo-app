@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, and, gte, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, InsertTodo, users, todos } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,115 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+/**
+ * Todo queries
+ */
+export async function createTodo(userId: number, todo: InsertTodo) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const result = await db.insert(todos).values({
+    ...todo,
+    userId,
+  });
+
+  return result;
+}
+
+export async function getTodosByUserId(userId: number, dueDate?: Date) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  if (dueDate) {
+    // Get todos for a specific date (from 00:00 to 23:59:59)
+    const startOfDay = new Date(dueDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(dueDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return await db
+      .select()
+      .from(todos)
+      .where(
+        and(
+          eq(todos.userId, userId),
+          gte(todos.dueDate, startOfDay),
+          lt(todos.dueDate, new Date(endOfDay.getTime() + 1))
+        )
+      )
+      .orderBy(todos.createdAt);
+  }
+
+  // Get all todos for user
+  return await db
+    .select()
+    .from(todos)
+    .where(eq(todos.userId, userId))
+    .orderBy(todos.createdAt);
+}
+
+export async function getTodoById(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const result = await db
+    .select()
+    .from(todos)
+    .where(and(eq(todos.id, id), eq(todos.userId, userId)))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updateTodo(id: number, userId: number, updates: Partial<InsertTodo>) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  return await db
+    .update(todos)
+    .set(updates)
+    .where(and(eq(todos.id, id), eq(todos.userId, userId)));
+}
+
+export async function deleteTodo(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  return await db
+    .delete(todos)
+    .where(and(eq(todos.id, id), eq(todos.userId, userId)));
+}
+
+export async function getTodosDateRange(userId: number, startDate: Date, endDate: Date) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+
+  return await db
+    .select()
+    .from(todos)
+    .where(
+      and(
+        eq(todos.userId, userId),
+        gte(todos.dueDate, start),
+        lt(todos.dueDate, new Date(end.getTime() + 1))
+      )
+    )
+    .orderBy(todos.dueDate, todos.createdAt);
+}
