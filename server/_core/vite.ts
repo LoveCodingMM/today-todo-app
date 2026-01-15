@@ -1,12 +1,42 @@
+import { webcrypto } from "crypto";
 import express, { type Express } from "express";
 import fs from "fs";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
-import { createServer as createViteServer } from "vite";
-import viteConfig from "../../vite.config";
+import { fileURLToPath } from "url";
+import { createRequire } from "module";
+
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const appRoot = path.resolve(moduleDir, "../..");
+const require = createRequire(import.meta.url);
+
+function ensureWebCrypto() {
+  const nodeCrypto = require("crypto") as typeof import("crypto") & {
+    getRandomValues?: typeof webcrypto.getRandomValues;
+    hash?: (algorithm: string, data: string, outputEncoding: "hex") => string;
+  };
+
+  if (typeof nodeCrypto.getRandomValues !== "function") {
+    nodeCrypto.getRandomValues = webcrypto.getRandomValues.bind(webcrypto);
+  }
+
+  if (typeof nodeCrypto.hash !== "function") {
+    nodeCrypto.hash = (algorithm, data, outputEncoding) =>
+      nodeCrypto.createHash(algorithm).update(data).digest(outputEncoding);
+  }
+
+  if (!(globalThis as { crypto?: Crypto }).crypto) {
+    (globalThis as { crypto?: Crypto }).crypto = webcrypto as Crypto;
+  }
+}
 
 export async function setupVite(app: Express, server: Server) {
+  ensureWebCrypto();
+  const { createServer: createViteServer } = await import("vite");
+  const viteConfigModule = await import("../../vite.config.ts");
+  const viteConfig = viteConfigModule.default;
+
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
@@ -25,12 +55,7 @@ export async function setupVite(app: Express, server: Server) {
     const url = req.originalUrl;
 
     try {
-      const clientTemplate = path.resolve(
-        import.meta.dirname,
-        "../..",
-        "client",
-        "index.html"
-      );
+      const clientTemplate = path.resolve(appRoot, "client", "index.html");
 
       // always reload the index.html file from disk incase it changes
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
@@ -50,8 +75,8 @@ export async function setupVite(app: Express, server: Server) {
 export function serveStatic(app: Express) {
   const distPath =
     process.env.NODE_ENV === "development"
-      ? path.resolve(import.meta.dirname, "../..", "dist", "public")
-      : path.resolve(import.meta.dirname, "public");
+      ? path.resolve(appRoot, "dist", "public")
+      : path.resolve(moduleDir, "public");
   if (!fs.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`

@@ -14,6 +14,7 @@ const inferredDialect =
     : "mysql";
 const dialect =
   override === "sqlite" || override === "mysql" ? override : inferredDialect;
+const outDir = dialect === "sqlite" ? "./drizzle/sqlite" : "./drizzle";
 
 function normalizeSqliteUrl(url: string): string {
   if (url === ":memory:") {
@@ -31,7 +32,7 @@ function normalizeSqliteUrl(url: string): string {
 export default defineConfig({
   schema:
     dialect === "sqlite" ? "./drizzle/schema.sqlite.ts" : "./drizzle/schema.ts",
-  out: "./drizzle",
+  out: outDir,
   dialect: dialect === "sqlite" ? "sqlite" : "mysql",
   dbCredentials: {
     url:
