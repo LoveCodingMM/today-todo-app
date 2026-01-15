@@ -1,9 +1,9 @@
 # 今日待办应用（today-todo-app）
 
-一个带 OAuth 登录的全栈今日待办应用，支持按日期查看、历史记录与任务状态管理。
+一个带本地账号密码登录的全栈今日待办应用，支持按日期查看、历史记录与任务状态管理。
 
 ## 功能概览
-- OAuth 登录与会话管理
+- 账号注册/登录与会话管理
 - 今日待办的新增、编辑、删除、完成切换
 - 按日期筛选与历史范围查询
 - 响应式界面与基础错误/加载处理
@@ -11,7 +11,7 @@
 ## 技术栈
 - 前端：Vite + React + Tailwind CSS + tRPC React Query
 - 后端：Node.js + Express + tRPC + Drizzle ORM
-- 数据库：MySQL
+- 数据库：MySQL / SQLite
 - 工具：Vitest、pnpm、drizzle-kit
 
 ## 目录结构
@@ -26,14 +26,12 @@ drizzle/   数据库 schema 与迁移
 在项目根目录创建 `.env`，以下变量按需配置：
 
 必需（核心功能）：
-- `VITE_APP_ID`：OAuth 应用 ID（前后端共用）
-- `OAUTH_SERVER_URL`：OAuth 服务端地址
-- `VITE_OAUTH_PORTAL_URL`：OAuth 登录入口地址
 - `JWT_SECRET`：会话签名密钥
-- `DATABASE_URL`：MySQL 连接串（用于 Drizzle 与服务端）
+- `DATABASE_URL`：数据库连接串（MySQL/SQLite）
 
 可选（增强功能）：
-- `OWNER_OPEN_ID`：指定管理员 openId
+- `OWNER_USERNAME`：指定管理员用户名
+- `DB_DIALECT`：强制指定 `mysql` 或 `sqlite`（默认根据 `DATABASE_URL` 推断）
 - `VITE_FRONTEND_FORGE_API_URL`：地图代理服务地址（默认 `https://forge.butterfly-effect.dev`）
 - `VITE_FRONTEND_FORGE_API_KEY`：地图相关 API Key
 - `BUILT_IN_FORGE_API_URL`、`BUILT_IN_FORGE_API_KEY`：服务端相关扩展能力
@@ -47,6 +45,9 @@ pnpm dev
 ```
 启动后访问 `http://localhost:3000/`（若端口占用会自动切换）。
 
+## 账号使用
+首次进入请先注册账号，之后使用账号密码登录。
+
 ## 构建与生产
 ```bash
 pnpm build
@@ -59,6 +60,11 @@ pnpm start
 pnpm db:push
 ```
 使用 `DATABASE_URL` 生成并执行 Drizzle 迁移。
+
+SQLite 示例：
+```
+DATABASE_URL=sqlite:./data.db
+```
 
 ## 测试与检查
 ```bash

@@ -1,15 +1,100 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { TRPCError } from "@trpc/server";
+import { z } from "zod";
+import { createSessionToken, hashPassword, sanitizeUser, verifyPassword } from "./_core/auth";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { ENV } from "./_core/env";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { z } from "zod";
-import { createTodo, getTodosByUserId, getTodoById, updateTodo, deleteTodo, getTodosDateRange } from "./db";
-import { TRPCError } from "@trpc/server";
+import {
+  createTodo,
+  createUser,
+  deleteTodo,
+  getTodoById,
+  getTodosByUserId,
+  getTodosDateRange,
+  getUserByUsername,
+  updateTodo,
+  updateUserLastSignedIn,
+} from "./db";
 
 export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
+    register: publicProcedure
+      .input(
+        z.object({
+          username: z.string().trim().min(3, "Username is required").max(32),
+          password: z.string().min(6, "Password must be at least 6 characters").max(128),
+          name: z.string().trim().max(64).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const existing = await getUserByUsername(input.username);
+        if (existing) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Username already exists",
+          });
+        }
+
+        const role =
+          ENV.ownerUsername && input.username === ENV.ownerUsername
+            ? "admin"
+            : "user";
+        const passwordHash = hashPassword(input.password);
+
+        await createUser({
+          username: input.username,
+          passwordHash,
+          name: input.name ?? null,
+          role,
+        });
+
+        const user = await getUserByUsername(input.username);
+        if (!user) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to create user",
+          });
+        }
+
+        const sessionToken = await createSessionToken(user.id);
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, {
+          ...cookieOptions,
+          maxAge: ONE_YEAR_MS,
+        });
+
+        return sanitizeUser(user);
+      }),
+    login: publicProcedure
+      .input(
+        z.object({
+          username: z.string().trim().min(3).max(32),
+          password: z.string().min(6).max(128),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const user = await getUserByUsername(input.username);
+        if (!user || !verifyPassword(input.password, user.passwordHash)) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Invalid username or password",
+          });
+        }
+
+        await updateUserLastSignedIn(user.id);
+        const sessionToken = await createSessionToken(user.id);
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, {
+          ...cookieOptions,
+          maxAge: ONE_YEAR_MS,
+        });
+
+        return sanitizeUser(user);
+      }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });

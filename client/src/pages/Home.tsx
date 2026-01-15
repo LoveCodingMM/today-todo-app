@@ -1,16 +1,15 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { AuthPanel } from "@/components/AuthPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
-import { getLoginUrl } from "@/const";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Check, Trash2, Plus, Calendar, History } from "lucide-react";
 import { toast } from "sonner";
-import { useRoute, useLocation } from "wouter";
+import { useLocation } from "wouter";
 
 export default function Home() {
-  const { user, loading: authLoading, isAuthenticated } = useAuth();
+  const { user, loading: authLoading, isAuthenticated, logout } = useAuth();
   const [, navigate] = useLocation();
   const [newTodoTitle, setNewTodoTitle] = useState("");
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -120,23 +119,7 @@ export default function Home() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-accent/5">
-        <div className="max-w-md w-full mx-4">
-          <Card className="p-8 shadow-lg">
-            <div className="text-center mb-8">
-              <h1 className="text-4xl font-bold text-foreground mb-2">今日待办</h1>
-              <p className="text-muted-foreground">精美简约的个人任务管理</p>
-            </div>
-            <p className="text-center text-muted-foreground mb-6">
-              登录后开始管理您的日常任务
-            </p>
-            <Button
-              onClick={() => (window.location.href = getLoginUrl())}
-              className="w-full bg-accent hover:opacity-90 text-accent-foreground font-semibold py-3 rounded-lg transition-all"
-            >
-              使用 Manus 登录
-            </Button>
-          </Card>
-        </div>
+        <AuthPanel subtitle="创建账号后即可开始管理待办" />
       </div>
     );
   }
@@ -152,17 +135,26 @@ export default function Home() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">今日待办</h1>
             <p className="text-sm text-muted-foreground">
-              {user?.name ? `欢迎，${user.name}` : "欢迎"}
+              {user?.name
+                ? `欢迎，${user.name}`
+                : user?.username
+                  ? `欢迎，${user.username}`
+                  : "欢迎"}
             </p>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => navigate("/history")}
-            className="flex items-center gap-2"
-          >
-            <History className="w-4 h-4" />
-            历史记录
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => navigate("/history")}
+              className="flex items-center gap-2"
+            >
+              <History className="w-4 h-4" />
+              历史记录
+            </Button>
+            <Button variant="ghost" onClick={logout}>
+              退出
+            </Button>
+          </div>
         </div>
       </header>
 
