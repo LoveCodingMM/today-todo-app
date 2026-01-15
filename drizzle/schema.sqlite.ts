@@ -6,10 +6,10 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
  */
 export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  openId: text("openId").notNull().unique(),
+  username: text("username").notNull().unique(),
+  passwordHash: text("passwordHash").notNull(),
   name: text("name"),
   email: text("email"),
-  loginMethod: text("loginMethod"),
   role: text("role", { enum: ["user", "admin"] }).notNull().default("user"),
   createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
   updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().notNull(),

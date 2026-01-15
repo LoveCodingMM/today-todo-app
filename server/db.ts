@@ -92,91 +92,48 @@ export async function getDb() {
   return _db;
 }
 
-export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) {
-    throw new Error("User openId is required for upsert");
-  }
-
+export async function createUser(input: {
+  username: string;
+  passwordHash: string;
+  name?: string | null;
+  email?: string | null;
+  role?: InsertUser["role"];
+}) {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
-    return;
+    throw new Error("Database not available");
   }
 
-  try {
-    const now = new Date();
-    const values: InsertUser = {
-      openId: user.openId,
-    };
-    const updateSet: Record<string, unknown> = {};
+  const schema = getSchema();
+  const now = new Date();
+  const values: InsertUser = {
+    username: input.username,
+    passwordHash: input.passwordHash,
+    name: input.name ?? null,
+    email: input.email ?? null,
+    role: input.role ?? "user",
+    createdAt: now,
+    updatedAt: now,
+    lastSignedIn: now,
+  };
 
-    const textFields = ["name", "email", "loginMethod"] as const;
-    type TextField = (typeof textFields)[number];
-
-    const assignNullable = (field: TextField) => {
-      const value = user[field];
-      if (value === undefined) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
-    };
-
-    textFields.forEach(assignNullable);
-
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
-    }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = "admin";
-      updateSet.role = "admin";
-    }
-
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = now;
-    }
-    if (!values.createdAt) {
-      values.createdAt = now;
-    }
-    if (!values.updatedAt) {
-      values.updatedAt = now;
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = now;
-    }
-    updateSet.updatedAt = now;
-
-    const dialect = getDialect() ?? "mysql";
-    if (dialect === "sqlite") {
-      const sqliteDb = db as ReturnType<typeof sqliteDrizzle>;
-      await sqliteDb
-        .insert(sqliteSchema.users)
-        .values(values)
-        .onConflictDoUpdate({
-          target: sqliteSchema.users.openId,
-          set: updateSet,
-        });
-      return;
-    }
-
-    const mysqlDb = db as ReturnType<typeof mysqlDrizzle>;
-    await mysqlDb
-      .insert(mysqlSchema.users)
-      .values(values)
-      .onDuplicateKeyUpdate({
-        set: updateSet,
-      });
-  } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
-  }
+  return await (db as any).insert(schema.users).values(values);
 }
 
-export async function getUserByOpenId(openId: string) {
+export async function updateUserLastSignedIn(userId: number, signedInAt = new Date()) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const schema = getSchema();
+  return await (db as any)
+    .update(schema.users)
+    .set({ lastSignedIn: signedInAt, updatedAt: signedInAt })
+    .where(eq(schema.users.id, userId));
+}
+
+export async function getUserByUsername(username: string) {
   const db = await getDb();
   if (!db) {
     console.warn("[Database] Cannot get user: database not available");
@@ -187,7 +144,24 @@ export async function getUserByOpenId(openId: string) {
   const result = await (db as any)
     .select()
     .from(schema.users)
-    .where(eq(schema.users.openId, openId))
+    .where(eq(schema.users.username, username))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserById(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get user: database not available");
+    return undefined;
+  }
+
+  const schema = getSchema();
+  const result = await (db as any)
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
     .limit(1);
 
   return result.length > 0 ? result[0] : undefined;

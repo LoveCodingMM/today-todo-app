@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { AuthPanel } from "@/components/AuthPanel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
@@ -7,7 +8,7 @@ import { ArrowLeft, Check, Calendar } from "lucide-react";
 import { useLocation } from "wouter";
 
 export default function History() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
   const [daysBack, setDaysBack] = useState(7);
 
@@ -71,10 +72,21 @@ export default function History() {
     pending: historyTodos.filter((t) => !t.completed).length,
   };
 
-  if (!isAuthenticated) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <p className="text-muted-foreground">请先登录</p>
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-accent"></div>
+          <p className="mt-4 text-muted-foreground">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-accent/5">
+        <AuthPanel title="历史记录" subtitle="登录后查看你的待办历史" />
       </div>
     );
   }
