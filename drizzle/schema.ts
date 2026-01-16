@@ -45,15 +45,41 @@ export type Todo = typeof todos.$inferSelect;
 export type InsertTodo = typeof todos.$inferInsert;
 
 /**
+ * Plan items for weekly/monthly planning.
+ */
+export const planItems = mysqlTable("plan_items", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  periodType: mysqlEnum("periodType", ["week", "month"]).notNull(),
+  periodStart: timestamp("periodStart").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  completed: boolean("completed").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PlanItem = typeof planItems.$inferSelect;
+export type InsertPlanItem = typeof planItems.$inferInsert;
+
+/**
  * Relations
  */
 export const usersRelations = relations(users, ({ many }) => ({
   todos: many(todos),
+  planItems: many(planItems),
 }));
 
 export const todosRelations = relations(todos, ({ one }) => ({
   user: one(users, {
     fields: [todos.userId],
+    references: [users.id],
+  }),
+}));
+
+export const planItemsRelations = relations(planItems, ({ one }) => ({
+  user: one(users, {
+    fields: [planItems.userId],
     references: [users.id],
   }),
 }));

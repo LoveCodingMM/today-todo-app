@@ -33,13 +33,36 @@ export const todos = sqliteTable("todos", {
 export type Todo = typeof todos.$inferSelect;
 export type InsertTodo = typeof todos.$inferInsert;
 
+export const planItems = sqliteTable("plan_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("userId").notNull(),
+  periodType: text("periodType", { enum: ["week", "month"] }).notNull(),
+  periodStart: integer("periodStart", { mode: "timestamp" }).notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  completed: integer("completed", { mode: "boolean" }).default(false).notNull(),
+  createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+  updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().notNull(),
+});
+
+export type PlanItem = typeof planItems.$inferSelect;
+export type InsertPlanItem = typeof planItems.$inferInsert;
+
 export const usersRelations = relations(users, ({ many }) => ({
   todos: many(todos),
+  planItems: many(planItems),
 }));
 
 export const todosRelations = relations(todos, ({ one }) => ({
   user: one(users, {
     fields: [todos.userId],
+    references: [users.id],
+  }),
+}));
+
+export const planItemsRelations = relations(planItems, ({ one }) => ({
+  user: one(users, {
+    fields: [planItems.userId],
     references: [users.id],
   }),
 }));

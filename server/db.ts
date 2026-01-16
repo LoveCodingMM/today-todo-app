@@ -1,8 +1,8 @@
-import { and, eq, gte, lt } from "drizzle-orm";
+import { and, eq, gte, lt, sql } from "drizzle-orm";
 import Database from "better-sqlite3";
 import { drizzle as sqliteDrizzle } from "drizzle-orm/better-sqlite3";
 import { drizzle as mysqlDrizzle } from "drizzle-orm/mysql2";
-import type { InsertTodo, InsertUser } from "../drizzle/schema";
+import type { InsertPlanItem, InsertTodo, InsertUser } from "../drizzle/schema";
 import * as mysqlSchema from "../drizzle/schema";
 import * as sqliteSchema from "../drizzle/schema.sqlite";
 import { ENV } from "./_core/env";
@@ -18,6 +18,36 @@ const schemas: Record<DbDialect, SchemaTables> = {
 
 let _db: DbClient | null = null;
 let _dialect: DbDialect | null = null;
+let _sqlite: Database | null = null;
+let _planTableReady = false;
+
+const PLAN_ITEMS_SQLITE = `
+  CREATE TABLE IF NOT EXISTS plan_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    userId INTEGER NOT NULL,
+    periodType TEXT NOT NULL,
+    periodStart INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    completed INTEGER NOT NULL DEFAULT 0,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL
+  );
+`;
+
+const PLAN_ITEMS_MYSQL = `
+  CREATE TABLE IF NOT EXISTS plan_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    userId INT NOT NULL,
+    periodType ENUM('week','month') NOT NULL,
+    periodStart TIMESTAMP NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    completed BOOLEAN NOT NULL DEFAULT false,
+    createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  );
+`;
 
 function resolveDialect(databaseUrl: string): DbDialect {
   const override = process.env.DB_DIALECT?.toLowerCase();
@@ -53,6 +83,25 @@ function normalizeSqlitePath(databaseUrl: string): string {
   return normalized || ":memory:";
 }
 
+async function ensurePlanItemsTable(
+  dialect: DbDialect,
+  db: DbClient,
+  sqlite: Database | null
+) {
+  if (_planTableReady) return;
+  try {
+    if (dialect === "sqlite") {
+      if (!sqlite) return;
+      sqlite.exec(PLAN_ITEMS_SQLITE);
+    } else {
+      await (db as any).execute(sql.raw(PLAN_ITEMS_MYSQL));
+    }
+    _planTableReady = true;
+  } catch (error) {
+    console.warn("[Database] Failed to ensure plan_items table:", error);
+  }
+}
+
 function getDialect(): DbDialect | null {
   if (_dialect) {
     return _dialect;
@@ -80,9 +129,13 @@ export async function getDb() {
       if (dialect === "sqlite") {
         const filename = normalizeSqlitePath(databaseUrl);
         const sqlite = new Database(filename);
+        _sqlite = sqlite;
         _db = sqliteDrizzle(sqlite);
       } else {
         _db = mysqlDrizzle(databaseUrl);
+      }
+      if (_db) {
+        await ensurePlanItemsTable(dialect, _db, _sqlite);
       }
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
@@ -218,6 +271,109 @@ export async function getTodosByUserId(userId: number, dueDate?: Date) {
     .from(schema.todos)
     .where(eq(schema.todos.userId, userId))
     .orderBy(schema.todos.createdAt);
+}
+
+/**
+ * Weekly/monthly plan queries
+ */
+export async function createPlanItem(
+  userId: number,
+  input: {
+    periodType: "week" | "month";
+    periodStart: Date;
+    title: string;
+    description?: string | null;
+  }
+) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const schema = getSchema();
+  const now = new Date();
+  const values: InsertPlanItem = {
+    userId,
+    periodType: input.periodType,
+    periodStart: input.periodStart,
+    title: input.title,
+    description: input.description ?? null,
+    completed: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  return await (db as any).insert(schema.planItems).values(values);
+}
+
+export async function getPlanItemsByPeriod(
+  userId: number,
+  periodType: "week" | "month",
+  periodStart: Date
+) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const schema = getSchema();
+  return await (db as any)
+    .select()
+    .from(schema.planItems)
+    .where(
+      and(
+        eq(schema.planItems.userId, userId),
+        eq(schema.planItems.periodType, periodType),
+        eq(schema.planItems.periodStart, periodStart)
+      )
+    )
+    .orderBy(schema.planItems.createdAt);
+}
+
+export async function getPlanItemById(userId: number, id: number) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const schema = getSchema();
+  const result = await (db as any)
+    .select()
+    .from(schema.planItems)
+    .where(and(eq(schema.planItems.id, id), eq(schema.planItems.userId, userId)))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updatePlanItem(
+  userId: number,
+  id: number,
+  updates: Partial<Pick<InsertPlanItem, "title" | "description" | "completed">>
+) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const schema = getSchema();
+  const now = new Date();
+  return await (db as any)
+    .update(schema.planItems)
+    .set({ ...updates, updatedAt: now })
+    .where(and(eq(schema.planItems.id, id), eq(schema.planItems.userId, userId)));
+}
+
+export async function deletePlanItem(userId: number, id: number) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const schema = getSchema();
+  return await (db as any)
+    .delete(schema.planItems)
+    .where(and(eq(schema.planItems.id, id), eq(schema.planItems.userId, userId)));
 }
 
 export async function getTodoById(id: number, userId: number) {
