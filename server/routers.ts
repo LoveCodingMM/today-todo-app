@@ -8,15 +8,42 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import {
   createTodo,
+  createPlanItem,
   createUser,
   deleteTodo,
+  deletePlanItem,
+  getPlanItemById,
+  getPlanItemsByPeriod,
   getTodoById,
   getTodosByUserId,
   getTodosDateRange,
   getUserByUsername,
   updateTodo,
+  updatePlanItem,
   updateUserLastSignedIn,
 } from "./db";
+
+const planTypeSchema = z.enum(["week", "month"]);
+type PlanType = z.infer<typeof planTypeSchema>;
+
+function getWeekStart(date: Date): Date {
+  const start = new Date(date);
+  const day = start.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  start.setDate(start.getDate() + diff);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function getMonthStart(date: Date): Date {
+  const start = new Date(date.getFullYear(), date.getMonth(), 1);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function getPlanPeriodStart(type: PlanType, anchor = new Date()): Date {
+  return type === "week" ? getWeekStart(anchor) : getMonthStart(anchor);
+}
 
 export const appRouter = router({
   system: systemRouter,
@@ -102,6 +129,66 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+  }),
+
+  plan: router({
+    list: protectedProcedure
+      .input(
+        z.object({
+          type: planTypeSchema,
+        })
+      )
+      .query(async ({ ctx, input }) => {
+        const periodStart = getPlanPeriodStart(input.type);
+        return await getPlanItemsByPeriod(ctx.user.id, input.type, periodStart);
+      }),
+    create: protectedProcedure
+      .input(
+        z.object({
+          type: planTypeSchema,
+          title: z.string().min(1, "Title is required").max(500),
+          description: z.string().max(2000).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const periodStart = getPlanPeriodStart(input.type);
+        return await createPlanItem(ctx.user.id, {
+          periodType: input.type,
+          periodStart,
+          title: input.title,
+          description: input.description,
+        });
+      }),
+    toggle: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const planItem = await getPlanItemById(ctx.user.id, input.id);
+        if (!planItem) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Plan item not found",
+          });
+        }
+
+        await updatePlanItem(ctx.user.id, input.id, {
+          completed: !planItem.completed,
+        });
+
+        return await getPlanItemById(ctx.user.id, input.id);
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const planItem = await getPlanItemById(ctx.user.id, input.id);
+        if (!planItem) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Plan item not found",
+          });
+        }
+        await deletePlanItem(ctx.user.id, input.id);
+        return { success: true };
+      }),
   }),
 
   todo: router({
