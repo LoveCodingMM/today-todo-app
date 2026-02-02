@@ -1,10 +1,19 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { AuthPanel } from "@/components/AuthPanel";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
-import { Check, Trash2, Plus, Calendar, History } from "lucide-react";
+import { Check, Trash2, Plus, Calendar, History, ListTodo, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
@@ -187,9 +196,19 @@ export default function Home() {
 
   const completedCount = todos.filter((t) => t.completed).length;
   const totalCount = todos.length;
+  const pendingTodos = todos.filter((t) => !t.completed);
+  const doneTodos = todos.filter((t) => t.completed);
   const planCompletedCount = planItems.filter((t) => t.completed).length;
   const planTotalCount = planItems.length;
   const planLabel = planType === "week" ? "本周计划" : "本月计划";
+  const todoCompletionRate = totalCount
+    ? Math.round((completedCount / totalCount) * 100)
+    : 0;
+  const planCompletionRate = planTotalCount
+    ? Math.round((planCompletedCount / planTotalCount) * 100)
+    : 0;
+  const isToday = selectedDate.toDateString() === new Date().toDateString();
+  const focusHint = pendingTodos[0]?.title || "先添加一件最重要的事";
 
   return (
     <div className="min-h-screen bg-background">
@@ -266,6 +285,87 @@ export default function Home() {
             </Button>
           </div>
         )}
+
+        {/* Dashboard */}
+        <section className="mb-10">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <Badge variant="secondary" className="rounded-full px-3 py-1">
+              {isToday ? "今日概览" : "所选日期概览"}
+            </Badge>
+            <span className="text-sm text-muted-foreground">
+              {isToday ? "保持节奏，专注当下" : "复盘与规划更清晰"}
+            </span>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Card className="border-border/70 bg-gradient-to-br from-accent/10 via-card to-card">
+              <CardHeader className="pb-2">
+                <CardDescription>今日待办</CardDescription>
+                <CardTitle className="text-3xl">
+                  {completedCount}/{totalCount || 0}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>完成率</span>
+                  <span>{todoCompletionRate}%</span>
+                </div>
+                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-accent transition-all"
+                    style={{ width: `${todoCompletionRate}%` }}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/70">
+              <CardHeader className="pb-2">
+                <CardDescription>待处理事项</CardDescription>
+                <CardTitle className="text-3xl">{pendingTodos.length}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-xs text-muted-foreground">优先处理：</div>
+                <p className="mt-1 text-sm font-medium text-foreground truncate">
+                  {focusHint}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/70">
+              <CardHeader className="pb-2">
+                <CardDescription>{planLabel}</CardDescription>
+                <CardTitle className="text-3xl">
+                  {planCompletedCount}/{planTotalCount || 0}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>完成率</span>
+                  <span>{planCompletionRate}%</span>
+                </div>
+                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${planCompletionRate}%` }}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/70 bg-gradient-to-br from-card via-card to-muted/60">
+              <CardHeader className="pb-2">
+                <CardDescription>今日节奏</CardDescription>
+                <CardTitle className="text-3xl">
+                  {isToday ? "专注" : "复盘"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">
+                  {isToday
+                    ? "完成 1 件关键任务，就能显著提升进度感。"
+                    : "回看这一天的完成情况，调整下一步计划。"}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
 
         {/* Plan Section */}
         <section className="mb-10">
@@ -398,32 +498,17 @@ export default function Home() {
           </div>
         </section>
 
-        <div className="mb-3 flex items-center">
+        <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-medium text-muted-foreground">每日待办</h3>
+          {totalCount > 0 && (
+            <span className="text-xs text-muted-foreground">
+              完成率 {todoCompletionRate}%
+            </span>
+          )}
         </div>
 
-        {/* Progress Bar */}
-        {totalCount > 0 && (
-          <div className="mb-8 bg-card rounded-lg p-4 border border-border">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-foreground">
-                完成进度
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {completedCount}/{totalCount}
-              </span>
-            </div>
-            <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-              <div
-                className="bg-accent h-full transition-all duration-300"
-                style={{ width: `${(completedCount / totalCount) * 100}%` }}
-              ></div>
-            </div>
-          </div>
-        )}
-
         {/* Add Todo Form */}
-        <form onSubmit={handleAddTodo} className="mb-8">
+        <form onSubmit={handleAddTodo} className="mb-6">
           <div className="flex gap-2">
             <Input
               type="text"
@@ -444,67 +529,185 @@ export default function Home() {
           </div>
         </form>
 
-        {/* Todos List */}
-        <div className="space-y-3">
-          {todosLoading ? (
-            <div className="text-center py-8">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
-              <p className="mt-2 text-muted-foreground">加载中...</p>
-            </div>
-          ) : todos.length === 0 ? (
-            <div className="text-center py-12 bg-card rounded-lg border border-border">
-              <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-3 opacity-50" />
-              <p className="text-muted-foreground">
-                {selectedDate.toDateString() === new Date().toDateString()
-                  ? "今天没有待办事项，放松一下吧！"
-                  : "这一天没有待办事项"}
-              </p>
-            </div>
-          ) : (
-            todos.map((todo) => (
-              <div
-                key={todo.id}
-                className={`flex items-center gap-4 p-4 bg-card rounded-lg border border-border hover:border-accent/30 transition-all group ${
-                  todo.completed ? "opacity-60" : ""
-                }`}
-              >
-                <button
-                  onClick={() => handleToggleTodo(todo.id)}
-                  className={`flex-shrink-0 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${
-                    todo.completed
-                      ? "bg-accent border-accent"
-                      : "border-muted hover:border-accent"
-                  }`}
-                >
-                  {todo.completed && (
-                    <Check className="w-4 h-4 text-accent-foreground" />
-                  )}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p
-                    className={`text-foreground font-medium transition-all ${
-                      todo.completed ? "line-through text-muted-foreground" : ""
+        {/* Todo Tabs */}
+        <Tabs defaultValue="list" className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="list">
+              <ListTodo className="w-4 h-4" />
+              列表
+            </TabsTrigger>
+            <TabsTrigger value="board">
+              <LayoutGrid className="w-4 h-4" />
+              看板
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="list">
+            <div className="space-y-3">
+              {todosLoading ? (
+                <div className="text-center py-8">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
+                  <p className="mt-2 text-muted-foreground">加载中...</p>
+                </div>
+              ) : todos.length === 0 ? (
+                <div className="text-center py-12 bg-card rounded-lg border border-border">
+                  <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-3 opacity-50" />
+                  <p className="text-muted-foreground">
+                    {selectedDate.toDateString() === new Date().toDateString()
+                      ? "今天没有待办事项，放松一下吧！"
+                      : "这一天没有待办事项"}
+                  </p>
+                </div>
+              ) : (
+                todos.map((todo) => (
+                  <div
+                    key={todo.id}
+                    className={`flex items-center gap-4 p-4 bg-card rounded-lg border border-border hover:border-accent/30 transition-all group ${
+                      todo.completed ? "opacity-60" : ""
                     }`}
                   >
-                    {todo.title}
-                  </p>
-                  {todo.description && (
-                    <p className="text-sm text-muted-foreground truncate">
-                      {todo.description}
-                    </p>
-                  )}
-                </div>
-                <button
-                  onClick={() => handleDeleteTodo(todo.id)}
-                  className="flex-shrink-0 p-2 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all rounded-md hover:bg-destructive/10"
-                  disabled={deleteMutation.isPending}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                    <button
+                      onClick={() => handleToggleTodo(todo.id)}
+                      className={`flex-shrink-0 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${
+                        todo.completed
+                          ? "bg-accent border-accent"
+                          : "border-muted hover:border-accent"
+                      }`}
+                    >
+                      {todo.completed && (
+                        <Check className="w-4 h-4 text-accent-foreground" />
+                      )}
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className={`text-foreground font-medium transition-all ${
+                          todo.completed
+                            ? "line-through text-muted-foreground"
+                            : ""
+                        }`}
+                      >
+                        {todo.title}
+                      </p>
+                      {todo.description && (
+                        <p className="text-sm text-muted-foreground truncate">
+                          {todo.description}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleDeleteTodo(todo.id)}
+                      className="flex-shrink-0 p-2 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all rounded-md hover:bg-destructive/10"
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </TabsContent>
+          <TabsContent value="board">
+            {todosLoading ? (
+              <div className="text-center py-8">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
+                <p className="mt-2 text-muted-foreground">加载中...</p>
               </div>
-            ))
-          )}
-        </div>
+            ) : todos.length === 0 ? (
+              <div className="text-center py-12 bg-card rounded-lg border border-border">
+                <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-3 opacity-50" />
+                <p className="text-muted-foreground">
+                  {selectedDate.toDateString() === new Date().toDateString()
+                    ? "今天没有待办事项，放松一下吧！"
+                    : "这一天没有待办事项"}
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Card className="border-border/70">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base">待办</CardTitle>
+                      <Badge variant="outline">{pendingTodos.length}</Badge>
+                    </div>
+                    <CardDescription>优先完成最重要的几件事</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {pendingTodos.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">
+                        已全部完成 🎉
+                      </div>
+                    ) : (
+                      pendingTodos.map((todo) => (
+                        <div
+                          key={todo.id}
+                          className="flex items-start gap-3 rounded-lg border border-border/70 bg-background/60 p-3"
+                        >
+                          <button
+                            onClick={() => handleToggleTodo(todo.id)}
+                            className="mt-1 h-5 w-5 rounded-md border-2 border-muted hover:border-accent"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground">
+                              {todo.title}
+                            </p>
+                            {todo.description && (
+                              <p className="text-xs text-muted-foreground">
+                                {todo.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+                <Card className="border-border/70">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base">已完成</CardTitle>
+                      <Badge variant="secondary">{doneTodos.length}</Badge>
+                    </div>
+                    <CardDescription>保持节奏，复盘今日收获</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {doneTodos.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">
+                        还没有完成的事项
+                      </div>
+                    ) : (
+                      doneTodos.map((todo) => (
+                        <div
+                          key={todo.id}
+                          className="flex items-start gap-3 rounded-lg border border-border/70 bg-background/60 p-3 opacity-80"
+                        >
+                          <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-md bg-accent text-accent-foreground">
+                            <Check className="h-3 w-3" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground line-through">
+                              {todo.title}
+                            </p>
+                            {todo.description && (
+                              <p className="text-xs text-muted-foreground">
+                                {todo.description}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => handleDeleteTodo(todo.id)}
+                            className="ml-auto rounded-md p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            disabled={deleteMutation.isPending}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );
